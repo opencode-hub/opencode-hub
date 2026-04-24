@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useWorkspaces } from "../hooks/useWorkspaces";
 
 interface CreateWorkspaceProps {
@@ -16,6 +17,22 @@ export function CreateWorkspace({ onCreated, onCancel }: CreateWorkspaceProps) {
   const [creating, setCreating] = useState(false);
 
   const canCreate = name.trim() && path.trim();
+
+  const handleBrowse = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Select Working Directory",
+    });
+    if (selected) {
+      setPath(selected);
+      // Auto-fill name from directory name if empty
+      if (!name.trim()) {
+        const dirName = selected.split("/").filter(Boolean).pop();
+        if (dirName) setName(dirName);
+      }
+    }
+  };
 
   const handleCreate = async () => {
     if (!canCreate) return;
@@ -52,18 +69,44 @@ export function CreateWorkspace({ onCreated, onCancel }: CreateWorkspaceProps) {
       </Field>
 
       <Field label="Working Directory">
-        <input
-          type="text"
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          placeholder="~/workspaces/my-project"
-          className="w-full px-3 py-2 text-sm rounded-md border outline-none focus:ring-2 focus:ring-blue-500/30 font-mono"
-          style={{
-            backgroundColor: "var(--hub-bg-primary)",
-            borderColor: "var(--hub-border)",
-            color: "var(--hub-text-primary)",
-          }}
-        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={path}
+            onChange={(e) => setPath(e.target.value)}
+            placeholder="~/workspaces/my-project"
+            className="flex-1 min-w-0 px-3 py-2 text-sm rounded-md border outline-none focus:ring-2 focus:ring-blue-500/30 font-mono"
+            style={{
+              backgroundColor: "var(--hub-bg-primary)",
+              borderColor: "var(--hub-border)",
+              color: "var(--hub-text-primary)",
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleBrowse}
+            className="flex items-center justify-center px-3 py-2 rounded-md border text-sm transition-colors hover:bg-black/5 dark:hover:bg-white/5 shrink-0"
+            style={{
+              borderColor: "var(--hub-border)",
+              color: "var(--hub-text-secondary)",
+            }}
+            title="Browse for folder"
+            aria-label="Browse for folder"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+        </div>
       </Field>
 
       <Field label="Password (optional)">

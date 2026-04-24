@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/main/nicegui/native/tauri.conf.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "OpenCode Hub",
   "version": "0.1.0",
   "identifier": "com.opencode-hub.app",
@@ -19,11 +19,10 @@
       {
         "title": "OpenCode Hub",
         "width": 360,
-        "height": 480,
-        "resizable": false,
-        "decorations": false,
-        "visible": false,
-        "skipTaskbar": true
+        "height": 520,
+        "resizable": true,
+        "decorations": true,
+        "visible": true
       }
     ]
   },

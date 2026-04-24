@@ -21,3 +21,4 @@ tokio = { version = "1", features = ["full"] }
 dirs = "6"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4.44", features = ["serde"] }
+tauri-plugin-dialog = "2.7.0"
