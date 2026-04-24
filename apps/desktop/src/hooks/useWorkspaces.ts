@@ -1,8 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
-import type { WorkspaceInfo } from "@opencode-hub/protocol";
+import { invoke } from "@tauri-apps/api/core";
 
-// In Tauri, we'll use invoke() to call Rust commands.
-// For now, stub with local state until Tauri backend is implemented.
+export interface WorkspaceInfo {
+  id: string;
+  name: string;
+  path: string;
+  port: number;
+  status: "running" | "stopped" | "starting" | "error";
+  pid?: number;
+  startedAt?: string;
+  autoStart: boolean;
+  password?: string;
+}
+
+export interface CreateWorkspaceConfig {
+  name: string;
+  path: string;
+  port?: number;
+  autoStart?: boolean;
+  password?: string;
+}
 
 interface UseWorkspacesReturn {
   workspaces: WorkspaceInfo[];
@@ -15,17 +32,8 @@ interface UseWorkspacesReturn {
   deleteWorkspace: (id: string) => Promise<void>;
 }
 
-export interface CreateWorkspaceConfig {
-  name: string;
-  path: string;
-  port?: number;
-  autoStart?: boolean;
-  password?: string;
-}
-
 /**
- * Hook for managing workspaces.
- * Currently uses local state — will be wired to Tauri invoke() commands.
+ * Hook for managing workspaces via Tauri invoke() commands.
  */
 export function useWorkspaces(): UseWorkspacesReturn {
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
@@ -36,14 +44,10 @@ export function useWorkspaces(): UseWorkspacesReturn {
     setLoading(true);
     setError(null);
     try {
-      // TODO: Replace with Tauri invoke("list_workspaces")
-      // For now, try reading from discovery file or use empty state
-      const stored = localStorage.getItem("opencode-hub-workspaces");
-      if (stored) {
-        setWorkspaces(JSON.parse(stored));
-      }
+      const list = await invoke<WorkspaceInfo[]>("list_workspaces");
+      setWorkspaces(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load workspaces");
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -53,46 +57,48 @@ export function useWorkspaces(): UseWorkspacesReturn {
     refresh();
   }, [refresh]);
 
-  const persist = (updated: WorkspaceInfo[]) => {
-    setWorkspaces(updated);
-    localStorage.setItem("opencode-hub-workspaces", JSON.stringify(updated));
-  };
-
   const startWorkspace = async (id: string) => {
-    // TODO: Tauri invoke("start_workspace", { id })
-    persist(
-      workspaces.map((w) =>
-        w.id === id ? { ...w, status: "running" as const, startedAt: new Date().toISOString() } : w,
-      ),
-    );
+    try {
+      await invoke("start_workspace", { id });
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   const stopWorkspace = async (id: string) => {
-    // TODO: Tauri invoke("stop_workspace", { id })
-    persist(
-      workspaces.map((w) =>
-        w.id === id ? { ...w, status: "stopped" as const, pid: undefined, startedAt: undefined } : w,
-      ),
-    );
+    try {
+      await invoke("stop_workspace", { id });
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   const createWorkspace = async (config: CreateWorkspaceConfig) => {
-    const newWorkspace: WorkspaceInfo = {
-      id: `ws-${Date.now().toString(36)}`,
-      name: config.name,
-      path: config.path,
-      port: config.port ?? 4096 + workspaces.length,
-      status: "stopped",
-      autoStart: config.autoStart ?? false,
-      password: config.password,
-    };
-    // TODO: Tauri invoke("create_workspace", { config })
-    persist([...workspaces, newWorkspace]);
+    try {
+      await invoke("create_workspace", {
+        input: {
+          name: config.name,
+          path: config.path,
+          port: config.port ?? null,
+          autoStart: config.autoStart ?? false,
+          password: config.password ?? null,
+        },
+      });
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   const deleteWorkspace = async (id: string) => {
-    // TODO: Tauri invoke("delete_workspace", { id })
-    persist(workspaces.filter((w) => w.id !== id));
+    try {
+      await invoke("delete_workspace", { id });
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   return {

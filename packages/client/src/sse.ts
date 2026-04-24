@@ -1,5 +1,6 @@
 // SSE (Server-Sent Events) subscriber for OpenCode real-time events.
 // Handles connection, reconnection, and event parsing.
+// Uses Node.js http module to bypass browser CORS restrictions (required for Electron/Obsidian).
 
 export interface SSEEvent {
   type: string;
@@ -19,10 +20,21 @@ export interface EventSubscriberOptions {
   reconnectDelay?: number;
   /** Maximum reconnect attempts. @default Infinity */
   maxReconnects?: number;
+  /**
+   * Custom fetch function for SSE transport.
+   * When provided, uses fetch-based streaming instead of EventSource.
+   * Useful in environments where EventSource is blocked by CORS but fetch
+   * can bypass it (e.g., Chrome extension service workers with host_permissions).
+   */
+  fetch?: typeof globalThis.fetch;
 }
 
 /**
  * Subscribes to OpenCode Server SSE event stream.
+ *
+ * Supports two transports:
+ * 1. Node.js `http` module (for Electron/Obsidian — bypasses CORS)
+ * 2. Browser `EventSource` (fallback for standard browsers)
  *
  * Usage:
  * ```ts
@@ -40,6 +52,9 @@ export class EventSubscriber {
   > &
     EventSubscriberOptions;
   private eventSource: EventSource | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private nodeRequest: any = null; // Node.js http.ClientRequest
+  private fetchController: AbortController | null = null; // fetch-based transport
   private reconnectCount = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
@@ -104,18 +119,213 @@ export class EventSubscriber {
     return this;
   }
 
-  /** Connect to the SSE stream. */
+  /** Connect to the SSE stream. Uses Node.js http if available (Electron), custom fetch if provided, or falls back to EventSource. */
   connect(): void {
     if (this.disposed) return;
     this.cleanup();
 
-    // EventSource doesn't support custom headers natively.
-    // If auth is needed, the URL must include credentials as query params,
-    // or we fall back to fetch-based SSE parsing.
-    // For local usage (127.0.0.1), Basic Auth is sent via URL credentials.
+    // Try Node.js http first (works in Electron/Obsidian, bypasses CORS)
+    try {
+      // Dynamic require to avoid bundler issues — only available in Node.js/Electron
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const g = globalThis as any;
+      const nodeRequire = g.require;
+      if (nodeRequire) {
+        const http = nodeRequire("http");
+        this.connectViaNode(http);
+        return;
+      }
+    } catch {
+      // Not in Node.js environment
+    }
+
+    // Use fetch-based transport if a custom fetch was provided (e.g., Chrome extension service worker)
+    if (this.options.fetch) {
+      this.connectViaFetch(this.options.fetch);
+      return;
+    }
+
+    // Fallback: browser EventSource
+    this.connectViaEventSource();
+  }
+
+  /** Connect using Node.js http module (CORS-free) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private connectViaNode(http: any): void {
+    const urlObj = new URL(this.options.url);
+
+    const reqHeaders: Record<string, string> = {
+      Accept: "text/event-stream",
+      "Cache-Control": "no-cache",
+      ...(this.options.headers ?? {}),
+    };
+
+    const req = http.get(
+      {
+        hostname: urlObj.hostname,
+        port: urlObj.port || (urlObj.protocol === "https:" ? 443 : 80),
+        path: urlObj.pathname + urlObj.search,
+        headers: reqHeaders,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (res: any) => {
+        if (res.statusCode !== 200) {
+          this.errorHandlers.forEach((h) =>
+            h(new Error(`SSE connection failed: HTTP ${res.statusCode}`)),
+          );
+          this.scheduleReconnect();
+          return;
+        }
+
+        this.reconnectCount = 0;
+        this.statusHandlers.forEach((h) => h(true));
+
+        res.setEncoding("utf8");
+        let buffer = "";
+
+        res.on("data", (chunk: string) => {
+          buffer += chunk;
+          // SSE events are separated by double newlines
+          const parts = buffer.split("\n\n");
+          // Keep the last part (may be incomplete)
+          buffer = parts.pop() ?? "";
+
+          for (const part of parts) {
+            if (!part.trim()) continue;
+            // Parse SSE format: "data: {...}\n"
+            const lines = part.split("\n");
+            for (const line of lines) {
+              if (line.startsWith("data: ") || line.startsWith("data:")) {
+                const jsonStr = line.startsWith("data: ")
+                  ? line.slice(6)
+                  : line.slice(5);
+                try {
+                  const data = JSON.parse(jsonStr) as SSEEvent;
+                  this.eventHandlers.forEach((h) => h(data));
+                } catch {
+                  // Non-JSON, ignore
+                }
+              }
+            }
+          }
+        });
+
+        res.on("end", () => {
+          this.statusHandlers.forEach((h) => h(false));
+          this.nodeRequest = null;
+          if (!this.disposed) this.scheduleReconnect();
+        });
+
+        res.on("error", () => {
+          this.statusHandlers.forEach((h) => h(false));
+          this.nodeRequest = null;
+          if (!this.disposed) this.scheduleReconnect();
+        });
+      },
+    );
+
+    req.on("error", () => {
+      this.statusHandlers.forEach((h) => h(false));
+      this.nodeRequest = null;
+      if (!this.disposed) this.scheduleReconnect();
+    });
+
+    this.nodeRequest = req;
+  }
+
+  /** Connect using fetch with streaming response (bypasses CORS in extension service workers) */
+  private connectViaFetch(fetchFn: typeof globalThis.fetch): void {
+    const controller = new AbortController();
+    this.fetchController = controller;
+
+    const headers: Record<string, string> = {
+      Accept: "text/event-stream",
+      "Cache-Control": "no-cache",
+      ...(this.options.headers ?? {}),
+    };
+
+    fetchFn(this.options.url, {
+      headers,
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          this.errorHandlers.forEach((h) =>
+            h(new Error(`SSE connection failed: HTTP ${response.status}`)),
+          );
+          this.scheduleReconnect();
+          return;
+        }
+
+        this.reconnectCount = 0;
+        this.statusHandlers.forEach((h) => h(true));
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          this.errorHandlers.forEach((h) =>
+            h(new Error("SSE response has no readable body")),
+          );
+          this.scheduleReconnect();
+          return;
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            // SSE events are separated by double newlines
+            const parts = buffer.split("\n\n");
+            buffer = parts.pop() ?? "";
+
+            for (const part of parts) {
+              if (!part.trim()) continue;
+              const lines = part.split("\n");
+              for (const line of lines) {
+                if (line.startsWith("data: ") || line.startsWith("data:")) {
+                  const jsonStr = line.startsWith("data: ")
+                    ? line.slice(6)
+                    : line.slice(5);
+                  try {
+                    const data = JSON.parse(jsonStr) as SSEEvent;
+                    this.eventHandlers.forEach((h) => h(data));
+                  } catch {
+                    // Non-JSON, ignore
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          if (controller.signal.aborted) return; // Intentional disconnect
+          this.errorHandlers.forEach((h) =>
+            h(err instanceof Error ? err : new Error(String(err))),
+          );
+        }
+
+        this.statusHandlers.forEach((h) => h(false));
+        this.fetchController = null;
+        if (!this.disposed) this.scheduleReconnect();
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return; // Intentional disconnect
+        this.statusHandlers.forEach((h) => h(false));
+        this.fetchController = null;
+        this.errorHandlers.forEach((h) =>
+          h(err instanceof Error ? err : new Error(String(err))),
+        );
+        if (!this.disposed) this.scheduleReconnect();
+      });
+  }
+
+  /** Connect using browser EventSource (standard browsers) */
+  private connectViaEventSource(): void {
     let url = this.options.url;
     if (this.options.headers?.["Authorization"]) {
-      // Extract credentials from Basic auth header and embed in URL
       const auth = this.options.headers["Authorization"];
       const match = auth.match(/^Basic (.+)$/);
       if (match) {
@@ -141,7 +351,6 @@ export class EventSubscriber {
         const data = JSON.parse(event.data) as SSEEvent;
         this.eventHandlers.forEach((h) => h(data));
       } catch {
-        // Non-JSON message, wrap it
         this.eventHandlers.forEach((h) =>
           h({ type: "raw", properties: { data: event.data } }),
         );
@@ -164,6 +373,8 @@ export class EventSubscriber {
 
   /** Check if currently connected. */
   get connected(): boolean {
+    if (this.nodeRequest) return true;
+    if (this.fetchController) return true;
     return this.eventSource?.readyState === EventSource.OPEN;
   }
 
@@ -175,6 +386,14 @@ export class EventSubscriber {
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
+    }
+    if (this.nodeRequest) {
+      try { this.nodeRequest.destroy(); } catch { /* ignore */ }
+      this.nodeRequest = null;
+    }
+    if (this.fetchController) {
+      this.fetchController.abort();
+      this.fetchController = null;
     }
   }
 

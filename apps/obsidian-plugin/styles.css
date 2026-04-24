@@ -1,0 +1,1135 @@
+/* ── Obsidian overrides — reset host container ───────────── */
+/* .view-content is the parent Obsidian wraps our view in.
+   It sets padding + overflow:auto which breaks our flex layout. */
+.workspace-leaf-content[data-type="opencode-hub-sidebar"] .view-content {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* ── Layout ──────────────────────────────────────────────── */
+.opencode-hub-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-size: 13px;
+  color: var(--text-normal);
+  overflow: hidden;
+}
+
+/* Reset Obsidian's global button styles inside our sidebar.
+   Obsidian sets: height: 30px, padding, border-radius, background on ALL buttons. */
+.opencode-hub-sidebar button {
+  background: transparent;
+  border: none;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  box-shadow: none;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Ensure all SVGs inside our sidebar behave as inline-flex items */
+.opencode-hub-sidebar svg {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.och-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  min-height: 38px;
+}
+.och-header-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.och-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.och-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0 !important;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.och-icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.och-icon-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.och-icon-btn:active {
+  background: var(--background-modifier-active-hover, var(--background-modifier-hover));
+  color: var(--text-normal);
+}
+
+/* Session dropdown — anchored to header, right-aligned, with search */
+.och-header { position: relative; } /* anchor for dropdown */
+.och-session-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  left: 0;
+  max-height: min(360px, 60vh);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+}
+.och-session-search {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: transparent;
+  color: var(--text-normal);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+.och-session-search::placeholder { color: var(--text-faint); }
+.och-session-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.och-session-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.och-session-item:hover { background: var(--background-modifier-hover); }
+.och-session-item--active {
+  background: var(--background-secondary);
+  font-weight: 600;
+}
+.och-session-item-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.och-session-item-time {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.och-session-delete-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.och-session-delete-btn svg { width: 12px; height: 12px; }
+.och-session-item:hover .och-session-delete-btn { opacity: 1; }
+.och-session-delete-btn:hover {
+  color: var(--text-error, #ef4444);
+  background: var(--background-modifier-hover);
+}
+
+/* ── Chat area ───────────────────────────────────────────── */
+.och-chat-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.och-chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px;
+  scroll-behavior: smooth;
+}
+
+/* Empty state */
+.och-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+  color: var(--text-faint);
+  text-align: center;
+  padding: 24px;
+}
+.och-empty-icon {
+  width: 36px;
+  height: 36px;
+  opacity: 0.3;
+}
+.och-empty-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.och-empty-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* ── Messages — left/right chat bubbles ──────────────────── */
+.och-turn {
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+/* User message — right-aligned bubble */
+.och-user-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-bottom: 4px;
+}
+.och-user-msg-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.och-user-msg-actions .och-msg-action-btn {
+  color: var(--text-faint);
+}
+.och-user-msg-time {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-right: 4px;
+}
+.och-user-msg:hover .och-user-msg-actions {
+  opacity: 1;
+}
+.och-user-bubble {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  cursor: text;
+}
+.och-user-bubble ::selection,
+.och-user-bubble::selection {
+  background: rgba(255, 255, 255, 0.35);
+  color: inherit;
+}
+/* Highlighted @mention pills inside user bubble */
+.och-user-bubble .och-inline-pill {
+  display: inline;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.2);
+  color: inherit;
+}
+
+/* Assistant message — left-aligned */
+.och-assistant-msg {
+  margin-top: 12px;
+}
+.och-assistant-content {
+  font-size: 13px;
+  line-height: 1.7;
+  user-select: text;
+  cursor: text;
+}
+.och-assistant-content p:first-child { margin-top: 0; }
+.och-assistant-content p:last-child { margin-bottom: 0; }
+
+/* Message metadata line — transparent by default, visible on hover */
+.och-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.och-assistant-msg:hover .och-msg-meta {
+  opacity: 1;
+}
+.och-msg-meta-sep {
+  color: var(--text-faint);
+  opacity: 0.5;
+}
+
+/* Message actions — inline with metadata */
+.och-msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.och-msg-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+.och-msg-action-btn:hover {
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+}
+.och-msg-action-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Thinking indicator */
+.och-thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 0;
+  animation: och-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes och-shimmer {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* ── Reasoning display ───────────────────────────────────── */
+.och-reasoning {
+  margin: 6px 0;
+}
+.och-reasoning-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 3px 0;
+  width: 100%;
+  text-align: left;
+}
+.och-reasoning-header:hover { color: var(--text-normal); }
+.och-reasoning-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+.och-reasoning-summary {
+  font-style: italic;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.och-reasoning-content {
+  padding: 6px 10px;
+  margin: 2px 0;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  border-left: 3px solid var(--background-modifier-border);
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.och-reasoning-content p {
+  margin: 0 0 6px;
+}
+.och-reasoning-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Tool calls — grouped by category ────────────────────── */
+.och-tool-group {
+  margin: 8px 0;
+  border-left: 2px solid var(--background-modifier-border);
+  padding-left: 14px;
+}
+.och-tool-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+}
+.och-tool-group-header:hover { color: var(--text-normal); }
+.och-tool-group-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.och-tool-group-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+  margin-left: auto;
+}
+.och-tool-group-chevron--open { transform: rotate(90deg); }
+.och-tool-group-details {
+  display: none;
+  padding: 6px 0 4px 0;
+}
+.och-tool-group-details--open { display: block; }
+.och-tool-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.och-tool-entry:hover { color: var(--text-muted); }
+.och-tool-entry-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.och-tool-entry-name {
+  font-weight: 500;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.och-tool-entry-detail {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+}
+.och-tool-entry-status {
+  font-size: 11px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--background-modifier-hover);
+}
+.och-tool-entry-status--success { color: #22c55e; }
+.och-tool-entry-status--error { color: #ef4444; }
+.och-tool-detail-pane {
+  display: none;
+  padding: 4px 0 4px 22px;
+  font-size: 12px;
+  color: var(--text-faint);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+  border-left: 1px solid var(--background-modifier-border);
+  margin-left: 7px;
+}
+.och-tool-detail-pane--open { display: block; }
+
+/* Question card — TUI-inspired: left accent border, numbered options */
+.och-question-card {
+  margin: 12px 0;
+  padding: 14px 16px 14px 14px;
+  border-left: 3px solid var(--interactive-accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--background-secondary);
+}
+.och-question-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-accent);
+  margin-bottom: 6px;
+}
+.och-question-text {
+  font-size: 13px;
+  color: var(--text-normal);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.och-question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 0;
+}
+.och-question-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-normal);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+  height: auto;
+  min-height: 0;
+  width: 100%;
+}
+.och-question-option:hover:not(:disabled) {
+  background: var(--background-modifier-hover);
+}
+.och-question-option .och-question-option-num {
+  color: var(--text-faint);
+  font-size: 13px;
+  min-width: 20px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.och-question-option .och-question-option-label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.och-question-option .och-question-option-label {
+  font-weight: 500;
+  color: var(--text-normal);
+}
+.och-question-option-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding-left: 24px;
+  line-height: 1.5;
+  margin-top: 1px;
+}
+.och-question-option[data-picked="true"] {
+  background: var(--background-modifier-hover);
+}
+.och-question-option[data-picked="true"] .och-question-option-label {
+  color: var(--interactive-accent);
+}
+/* Checkbox/radio indicators */
+.och-question-option-check {
+  font-family: monospace;
+  color: var(--text-faint);
+  margin-right: 4px;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.och-question-option[data-picked="true"] .och-question-option-check {
+  color: var(--text-success, #10b981);
+}
+.och-question-option-checkmark {
+  color: var(--text-success, #10b981);
+  font-weight: 600;
+  margin-left: 6px;
+}
+/* Tab bar for multi-question */
+.och-question-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+.och-question-tab {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  height: auto;
+  min-height: 0;
+  transition: background 0.1s, color 0.1s;
+}
+.och-question-tab:hover { background: var(--background-modifier-hover); }
+.och-question-tab[data-active="true"] {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+.och-question-tab[data-answered="true"]:not([data-active="true"]) {
+  color: var(--text-normal);
+  font-weight: 500;
+}
+.och-question-tab[data-ready="true"]:not([data-active="true"]) {
+  color: var(--text-success, #10b981);
+  font-weight: 600;
+}
+/* Footer actions */
+.och-question-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.och-question-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+.och-question-footer-btn {
+  padding: 5px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  height: auto;
+  min-height: 0;
+  transition: background 0.1s;
+}
+.och-question-footer-btn:hover:not(:disabled) {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.och-question-footer-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.och-question-dismiss {
+  border: none;
+  color: var(--text-faint);
+}
+.och-question-submit {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+.och-question-submit:hover:not(:disabled) {
+  background: var(--interactive-accent-hover);
+  color: var(--text-on-accent);
+}
+/* Custom answer input */
+.och-question-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-left: 0;
+}
+.och-question-custom-input {
+  flex: 1;
+  padding: 5px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 13px;
+  outline: none;
+  height: auto;
+  min-height: 0;
+}
+.och-question-custom-input:focus {
+  border-color: var(--interactive-accent);
+}
+.och-question-custom-input::placeholder {
+  color: var(--text-faint);
+}
+
+/* Error message */
+.och-error-msg {
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: var(--text-error, #ef4444);
+  font-size: 12px;
+}
+
+/* ── Jump-to-bottom FAB ──────────────────────────────────── */
+.och-jump-bottom {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  z-index: 10;
+  transition: opacity 0.15s;
+}
+.och-jump-bottom:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+/* ── Composer region (bottom) ────────────────────────────── */
+.och-composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  padding-bottom: 28px;
+  /* Tight vertical grouping — input + tray feel like one unit */
+}
+
+/* Context strip — active file + open tabs chips above input */
+.och-context-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 0;
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+.och-context-strip::-webkit-scrollbar { display: none; }
+.och-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.och-context-chip--active {
+  color: var(--text-accent);
+  border-color: rgba(var(--interactive-accent-rgb, 72, 120, 255), 0.3);
+  background: rgba(var(--interactive-accent-rgb, 72, 120, 255), 0.06);
+}
+.och-context-chip-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.och-context-chip-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.och-context-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.och-context-more {
+  font-size: 10px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Attachments preview — inside composer, above input */
+.och-attachments {
+  display: flex;
+  gap: 6px;
+  padding: 6px 12px 0;
+}
+.och-attachment-thumb {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+}
+.och-attachment-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.och-attachment-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-error, #ef4444);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* Input row — editor only, full width */
+.och-input-row {
+  position: relative;
+  padding: 8px 12px 2px;
+}
+
+/* The contenteditable input */
+.och-editor {
+  width: 100%;
+  min-height: 36px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  color: var(--text-normal);
+  background: var(--background-secondary);
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  transition: border-color 0.15s;
+}
+.och-editor:focus {
+  border-color: var(--interactive-accent);
+}
+.och-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.och-editor[data-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Inline pills inside contenteditable */
+.och-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  vertical-align: baseline;
+  line-height: 1.6;
+  user-select: all;
+}
+.och-pill--file {
+  color: var(--text-accent);
+  background: rgba(var(--interactive-accent-rgb, 72, 120, 255), 0.12);
+}
+.och-pill--agent {
+  color: var(--text-warning, #e6a700);
+  background: rgba(230, 167, 0, 0.1);
+}
+
+/* Submit button — dark circle, white arrow, inverted from background */
+.opencode-hub-sidebar .och-submit-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none !important;
+  border-radius: 50% !important;
+  background: var(--text-normal) !important;
+  color: var(--background-primary) !important;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  margin-left: auto;
+  padding: 0 !important;
+}
+.opencode-hub-sidebar .och-submit-btn:hover { opacity: 0.85; }
+.opencode-hub-sidebar .och-submit-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.opencode-hub-sidebar .och-submit-btn svg {
+  width: 16px;
+  height: 16px;
+  color: var(--background-primary);
+}
+
+/* Spinner for submit */
+.och-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--text-on-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: och-spin 0.65s linear infinite;
+}
+@keyframes och-spin { to { transform: rotate(360deg); } }
+
+/* ── Dock tray (below input) ─────────────────────────────── */
+.och-dock-tray {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 6px;
+  font-size: 11px;
+  position: relative;
+}
+
+/* Tray select (ghost button) */
+.och-tray-select {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s;
+}
+.och-tray-select:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.och-tray-chevron {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+/* Tray separator dot */
+.och-tray-sep {
+  color: var(--text-faint);
+  opacity: 0.4;
+  font-size: 10px;
+}
+
+/* Server info items (read-only model, thinking, agent labels) */
+.och-tray-label {
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Dropdown (used for agent, model, variant selects) ───── */
+.och-dropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  min-width: 160px;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 200;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 4px;
+}
+.och-dropdown-search {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: transparent;
+  color: var(--text-normal);
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+  margin-bottom: 2px;
+}
+.och-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-normal);
+}
+.och-dropdown-item:hover,
+.och-dropdown-item--active {
+  background: var(--background-modifier-hover);
+}
+.och-dropdown-item--selected {
+  font-weight: 600;
+}
+.och-dropdown-item-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.och-dropdown-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.och-dropdown-item-desc {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.och-dropdown-item-tag {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--text-faint);
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--background-secondary);
+}
+
+/* ── Popover (slash & @ mention) ─────────────────────────── */
+.och-popover {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 200;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.15);
+  padding: 4px;
+}
+.och-popover-section {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 8px 2px;
+}
+.och-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.och-popover-item:hover,
+.och-popover-item--active {
+  background: var(--background-modifier-hover);
+}
+.och-popover-item-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.och-popover-item-label {
+  font-weight: 500;
+  color: var(--text-normal);
+  white-space: nowrap;
+}
+.och-popover-item-desc {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.och-popover-item-tag {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--text-faint);
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--background-secondary);
+}
+.och-popover-item-shortcut {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-faint);
+  font-family: var(--font-monospace);
+}
+.och-popover-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+}

@@ -1,11 +1,45 @@
 import { App, PluginSettingTab, Setting, Notice } from "obsidian";
-import type OpenCodeHubPlugin from "./main";
+
+// ─── Settings interface & defaults ─────────────────────────
+
+export interface OpenCodeHubSettings {
+  serverUrl: string;
+  password: string;
+  autoConnect: boolean;
+  // Context
+  showWorkspaceContext: boolean;
+  showOpenTabs: boolean;
+  // Agent
+  defaultAgent: string;
+}
+
+export const DEFAULT_SETTINGS: OpenCodeHubSettings = {
+  serverUrl: "http://127.0.0.1:4096",
+  password: "",
+  autoConnect: true,
+  showWorkspaceContext: true,
+  showOpenTabs: true,
+  defaultAgent: "",
+};
+
+// Minimal interface so we don't import the plugin class directly (avoids circular deps).
+interface OpenCodeHubPluginLike {
+  settings: OpenCodeHubSettings;
+  isConnected: boolean;
+  connect(): Promise<void>;
+  disconnect(): void;
+  saveSettings(): Promise<void>;
+}
+
+// ─── Settings tab ──────────────────────────────────────────
 
 export class OpenCodeHubSettingTab extends PluginSettingTab {
-  plugin: OpenCodeHubPlugin;
+  private plugin: OpenCodeHubPluginLike;
 
-  constructor(app: App, plugin: OpenCodeHubPlugin) {
-    super(app, plugin);
+  constructor(app: App, plugin: OpenCodeHubPluginLike & { app: App }) {
+    // PluginSettingTab expects a Plugin instance; the real plugin satisfies this
+    // at runtime. We cast here to keep the minimal interface above.
+    super(app, plugin as any);
     this.plugin = plugin;
   }
 
@@ -13,9 +47,11 @@ export class OpenCodeHubSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "OpenCode Hub" });
+    // ── Connection ───────────────────────────────────────
 
-    // Connection status
+    containerEl.createEl("h2", { text: "Connection" });
+
+    // Live status indicator
     const statusEl = containerEl.createDiv({ cls: "setting-item" });
     const statusDot = statusEl.createSpan();
     statusDot.style.cssText = `
@@ -30,7 +66,6 @@ export class OpenCodeHubSettingTab extends PluginSettingTab {
       text: this.plugin.isConnected ? "Connected" : "Disconnected",
     });
 
-    // Server URL
     new Setting(containerEl)
       .setName("Server URL")
       .setDesc("URL of the OpenCode server (e.g., http://127.0.0.1:4096)")
@@ -44,7 +79,6 @@ export class OpenCodeHubSettingTab extends PluginSettingTab {
           }),
       );
 
-    // Password
     new Setting(containerEl)
       .setName("Password")
       .setDesc("Server password (leave empty if no auth)")
@@ -59,7 +93,6 @@ export class OpenCodeHubSettingTab extends PluginSettingTab {
           });
       });
 
-    // Auto-connect
     new Setting(containerEl)
       .setName("Auto-connect")
       .setDesc("Automatically connect when Obsidian starts")
@@ -72,7 +105,6 @@ export class OpenCodeHubSettingTab extends PluginSettingTab {
           }),
       );
 
-    // Connect/Disconnect button
     new Setting(containerEl).addButton((button) => {
       button
         .setButtonText(this.plugin.isConnected ? "Disconnect" : "Connect")
@@ -90,8 +122,53 @@ export class OpenCodeHubSettingTab extends PluginSettingTab {
               );
             }
           }
-          this.display(); // Refresh UI
+          this.display();
         });
     });
+
+    // ── Context ──────────────────────────────────────────
+
+    containerEl.createEl("h2", { text: "Context" });
+
+    new Setting(containerEl)
+      .setName("Show workspace context panel")
+      .setDesc("Display a workspace context panel in the sidebar")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.showWorkspaceContext)
+          .onChange(async (value) => {
+            this.plugin.settings.showWorkspaceContext = value;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Show open tabs")
+      .setDesc("Include open tabs in the workspace context panel")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.showOpenTabs)
+          .onChange(async (value) => {
+            this.plugin.settings.showOpenTabs = value;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    // ── Agent ────────────────────────────────────────────
+
+    containerEl.createEl("h2", { text: "Agent" });
+
+    new Setting(containerEl)
+      .setName("Default agent")
+      .setDesc("Agent to use by default when starting a new session")
+      .addText((text) =>
+        text
+          .setPlaceholder("Leave empty for default")
+          .setValue(this.plugin.settings.defaultAgent)
+          .onChange(async (value) => {
+            this.plugin.settings.defaultAgent = value;
+            await this.plugin.saveSettings();
+          }),
+      );
   }
 }

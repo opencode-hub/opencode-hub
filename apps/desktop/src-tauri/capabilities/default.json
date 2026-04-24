@@ -7,6 +7,9 @@
     "shell:allow-open",
     "shell:allow-execute",
     "dialog:allow-open",
-    "dialog:default"
+    "dialog:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
   ]
 }

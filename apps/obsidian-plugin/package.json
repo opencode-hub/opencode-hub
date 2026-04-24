@@ -7,17 +7,20 @@
   "scripts": {
     "build": "esbuild src/main.ts --bundle --external:obsidian --external:electron --format=cjs --outfile=dist/main.js --platform=node --target=es2022",
     "dev": "esbuild src/main.ts --bundle --external:obsidian --external:electron --format=cjs --outfile=dist/main.js --platform=node --target=es2022 --watch",
+    "dev:preview": "vite --config dev/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@opencode-hub/client": "workspace:*",
-    "@opencode-hub/protocol": "workspace:*"
+    "@opencode-hub/protocol": "workspace:*",
+    "fuzzysort": "^3.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "esbuild": "^0.25.0",
     "obsidian": "^1.7.2",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vite": "^6.4.2"
   }
 }

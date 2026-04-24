@@ -20,6 +20,7 @@ import type {
   ConfigResponse,
   Agent,
   Todo,
+  QuestionRequest,
 } from "./types.js";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:4096";
@@ -268,7 +269,7 @@ export class OpenCodeClient {
     contextText: string,
   ): Promise<void> {
     return this.sendMessageAsync(sessionId, {
-      parts: [{ type: "text", text: contextText }],
+      parts: [{ type: "text", text: contextText, synthetic: true }],
       noReply: true,
     });
   }
@@ -336,6 +337,26 @@ export class OpenCodeClient {
     default: Record<string, string>;
   }> {
     return this.get("/config/providers");
+  }
+
+  // ─── Question ──────────────────────────────────────────────
+
+  /** List pending question requests. */
+  async listQuestions(): Promise<QuestionRequest[]> {
+    return this.get("/question");
+  }
+
+  /** Reply to a question request. */
+  async replyQuestion(
+    requestId: string,
+    answers: string[][],
+  ): Promise<void> {
+    return this.post(`/question/${requestId}/reply`, { answers });
+  }
+
+  /** Reject a question request. */
+  async rejectQuestion(requestId: string): Promise<void> {
+    return this.post(`/question/${requestId}/reject`);
   }
 
   // ─── Agent ─────────────────────────────────────────────────

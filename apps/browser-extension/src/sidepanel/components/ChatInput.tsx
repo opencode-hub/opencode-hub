@@ -4,11 +4,12 @@ import { useChatStore } from "../store/chat";
 export function ChatInput() {
   const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { addUserMessage, streaming } = useChatStore();
+  const { addUserMessage, streaming, busy } = useChatStore();
+  const disabled = streaming || busy;
 
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
-    if (!trimmed || streaming) return;
+    if (!trimmed || disabled) return;
 
     addUserMessage(trimmed);
     setText("");
@@ -23,7 +24,7 @@ export function ChatInput() {
       type: "SEND_MESSAGE",
       text: trimmed,
     });
-  }, [text, streaming, addUserMessage]);
+  }, [text, disabled, addUserMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -65,11 +66,11 @@ export function ChatInput() {
             minHeight: "20px",
             maxHeight: "120px",
           }}
-          disabled={streaming}
+          disabled={disabled}
         />
         <button
           onClick={handleSend}
-          disabled={!text.trim() || streaming}
+          disabled={!text.trim() || disabled}
           className="flex items-center justify-center w-7 h-7 rounded-md transition-colors disabled:opacity-30"
           style={{ backgroundColor: "var(--hub-accent)", color: "#fff" }}
           aria-label="Send"

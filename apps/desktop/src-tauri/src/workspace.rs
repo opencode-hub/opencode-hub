@@ -154,6 +154,8 @@ impl WorkspaceManager {
         cmd.arg("serve")
             .arg("--port")
             .arg(config.port.to_string())
+            .arg("--cors")
+            .arg("*")
             .current_dir(&config.path);
 
         if let Some(ref password) = config.password {
@@ -188,6 +190,17 @@ impl WorkspaceManager {
         Ok(())
     }
 
+    /// Stop all running workspace processes.
+    pub fn stop_all(&self) {
+        let mut processes = self.processes.lock().unwrap();
+        for (_, mut child) in processes.drain() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        drop(processes);
+        let _ = self.update_discovery();
+    }
+
     /// Auto-start workspaces marked with autoStart.
     pub fn auto_start(&self) -> Result<(), String> {
         let configs = self.load_configs();
@@ -215,9 +228,22 @@ impl WorkspaceManager {
         let json = serde_json::to_string_pretty(&discovery).map_err(|e| e.to_string())?;
         fs::write(discovery_path, json).map_err(|e| e.to_string())
     }
+
+    /// Return all workspaces with runtime status (used by tray menu builder).
+    pub fn list_all(&self) -> Vec<WorkspaceInfo> {
+        let configs = self.load_configs();
+        configs.iter().map(|c| self.config_to_info(c)).collect()
+    }
 }
 
 // ─── Tauri commands ──────────────────────────────────────────────
+
+/// Helper: rebuild tray menu after workspace state changes.
+fn sync_tray(app: &tauri::AppHandle) {
+    if let Err(e) = crate::rebuild_tray_menu(app) {
+        eprintln!("Failed to rebuild tray menu: {}", e);
+    }
+}
 
 #[tauri::command]
 pub fn list_workspaces(manager: tauri::State<WorkspaceManager>) -> Vec<WorkspaceInfo> {
@@ -227,6 +253,7 @@ pub fn list_workspaces(manager: tauri::State<WorkspaceManager>) -> Vec<Workspace
 
 #[tauri::command]
 pub fn create_workspace(
+    app: tauri::AppHandle,
     manager: tauri::State<WorkspaceManager>,
     input: CreateWorkspaceInput,
 ) -> Result<WorkspaceInfo, String> {
@@ -241,30 +268,51 @@ pub fn create_workspace(
 
     manager.save_config(&config)?;
     manager.start(&config)?;
+    sync_tray(&app);
 
     Ok(manager.config_to_info(&config))
 }
 
 #[tauri::command]
-pub fn start_workspace(manager: tauri::State<WorkspaceManager>, id: String) -> Result<(), String> {
+pub fn start_workspace(
+    app: tauri::AppHandle,
+    manager: tauri::State<WorkspaceManager>,
+    id: String,
+) -> Result<(), String> {
     let configs = manager.load_configs();
     let config = configs
         .iter()
         .find(|c| c.id == id)
         .ok_or_else(|| format!("Workspace '{}' not found", id))?;
-    manager.start(config)
+    manager.start(config)?;
+    sync_tray(&app);
+    Ok(())
 }
 
 #[tauri::command]
-pub fn stop_workspace(manager: tauri::State<WorkspaceManager>, id: String) -> Result<(), String> {
-    manager.stop(&id)
-}
-
-#[tauri::command]
-pub fn delete_workspace(
+pub fn stop_workspace(
+    app: tauri::AppHandle,
     manager: tauri::State<WorkspaceManager>,
     id: String,
 ) -> Result<(), String> {
     manager.stop(&id)?;
-    manager.delete_config(&id)
+    sync_tray(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_workspace(
+    app: tauri::AppHandle,
+    manager: tauri::State<WorkspaceManager>,
+    id: String,
+) -> Result<(), String> {
+    manager.stop(&id)?;
+    manager.delete_config(&id)?;
+    sync_tray(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn refresh_tray(app: tauri::AppHandle) {
+    sync_tray(&app);
 }

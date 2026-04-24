@@ -22,3 +22,6 @@ dirs = "6"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4.44", features = ["serde"] }
 tauri-plugin-dialog = "2.7.0"
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-autostart = "2.5.1"

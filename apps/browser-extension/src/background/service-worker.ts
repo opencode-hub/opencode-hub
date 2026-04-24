@@ -18,11 +18,13 @@ async function connect(baseUrl: string, password?: string) {
   const health = await client.health();
   console.log(`Connected to OpenCode server v${health.version}`);
 
-  // Subscribe to SSE events
+  // Subscribe to SSE events using fetch transport to bypass CORS
+  // (EventSource doesn't respect host_permissions, but fetch does)
   eventSubscriber?.disconnect();
   eventSubscriber = new EventSubscriber({
     url: client.eventUrl,
     headers: client.authHeaders,
+    fetch: globalThis.fetch.bind(globalThis),
   });
 
   eventSubscriber

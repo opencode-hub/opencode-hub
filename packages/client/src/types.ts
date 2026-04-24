@@ -25,10 +25,11 @@ export interface Session {
   updatedAt: string;
 }
 
-export interface SessionStatus {
-  running: boolean;
-  tool?: string;
-}
+/** Session status — discriminated union matching server's SessionStatus.Info */
+export type SessionStatus =
+  | { type: "idle" }
+  | { type: "busy" }
+  | { type: "retry"; attempt: number; message: string; next: number };
 
 export interface CreateSessionBody {
   parentID?: string;
@@ -44,6 +45,8 @@ export interface UpdateSessionBody {
 export interface MessagePart {
   type: "text";
   text: string;
+  /** If true, this part is system-generated context (not real user input). */
+  synthetic?: boolean;
 }
 
 export interface ModelRef {
@@ -141,16 +144,50 @@ export interface FileDiff {
 export interface Provider {
   id: string;
   name: string;
-  models: ProviderModel[];
+  /** Models is a dict keyed by modelID, not an array */
+  models: Record<string, ProviderModel>;
 }
 
 export interface ProviderModel {
   id: string;
   name: string;
+  capabilities?: {
+    reasoning?: boolean;
+    temperature?: boolean;
+    attachment?: boolean;
+    toolcall?: boolean;
+  };
 }
 
 export interface ConfigResponse {
+  /** Model in "provider/modelId" format, e.g. "anthropic/claude-sonnet-4-20250514" */
+  model?: string;
   [key: string]: unknown;
+}
+
+// ─── Question ──────────────────────────────────────────────────
+
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface QuestionInfo {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiple?: boolean;
+  custom?: boolean;
+}
+
+export interface QuestionRequest {
+  id: string;
+  sessionID: string;
+  questions: QuestionInfo[];
+  tool?: {
+    messageID: string;
+    callID: string;
+  };
 }
 
 // ─── Agent ─────────────────────────────────────────────────────
