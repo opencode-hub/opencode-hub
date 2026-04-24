@@ -122,7 +122,7 @@ impl WorkspaceManager {
                 WorkspaceStatus::Stopped
             },
             pid: if is_running {
-                processes.get(&config.id).and_then(|c| c.id())
+                processes.get(&config.id).map(|c| c.id())
             } else {
                 None
             },
@@ -210,13 +210,6 @@ impl WorkspaceManager {
             "workspaces": infos,
             "clients": [],
             "updatedAt": chrono::Utc::now().to_rfc3339(),
-        });
-
-        // Fallback if chrono is not available — use a simple timestamp
-        let discovery = serde_json::json!({
-            "workspaces": infos,
-            "clients": [],
-            "updatedAt": ""
         });
 
         let json = serde_json::to_string_pretty(&discovery).map_err(|e| e.to_string())?;
