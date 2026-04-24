@@ -1,0 +1,9 @@
+{
+  "id": "opencode-hub",
+  "name": "OpenCode Hub",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "AI sidebar powered by OpenCode — chat with vault context, generate notes, and connect to your workspace.",
+  "author": "OpenCode Hub",
+  "isDesktopOnly": true
+}

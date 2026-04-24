@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "OpenCode Hub",
+  "version": "0.1.0",
+  "description": "AI sidebar powered by OpenCode — summarize pages, chat with context, and connect to your workspace.",
+  "permissions": [
+    "sidePanel",
+    "contextMenus",
+    "activeTab",
+    "tabs",
+    "scripting",
+    "storage",
+    "nativeMessaging"
+  ],
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/index.ts"],
+      "css": []
+    }
+  ],
+  "options_page": "src/options/index.html",
+  "action": {
+    "default_title": "OpenCode Hub"
+  },
+  "icons": {
+    "16": "public/icons/icon-16.png",
+    "48": "public/icons/icon-48.png",
+    "128": "public/icons/icon-128.png"
+  }
+}

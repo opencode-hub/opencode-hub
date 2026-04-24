@@ -1,0 +1,25 @@
+{
+  "name": "@opencode-hub/client",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for communicating with OpenCode Server — zero UI dependencies.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@opencode-hub/protocol": "workspace:*"
+  },
+  "files": ["dist"],
+  "license": "MIT"
+}
