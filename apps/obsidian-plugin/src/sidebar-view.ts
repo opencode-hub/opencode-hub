@@ -1237,6 +1237,18 @@ export class SidebarView extends ItemView {
   private _pollThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   /** Whether a poll is currently in flight (prevents concurrent polls) */
   private _pollInFlight = false;
+
+  // ── Streaming state (accumulated from SSE deltas) ──────────
+  /** Accumulated streaming text from message.part.delta events, keyed by partID */
+  private _streamingText = "";
+  /** Accumulated streaming reasoning text */
+  private _streamingReasoning = "";
+  /** Whether we're actively receiving streaming deltas */
+  private _isStreaming = false;
+  /** DOM element for the live streaming content (updated in-place, no full re-render) */
+  private _streamingEl: HTMLElement | null = null;
+  /** DOM element for the streaming content text inside _streamingEl */
+  private _streamingContentEl: HTMLElement | null = null;
   /** Pending question from question.asked SSE event */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _pendingQuestion: {
@@ -1498,6 +1510,7 @@ export class SidebarView extends ItemView {
     if (sessionId === this.plugin.currentSessionId) return;
     this.plugin.currentSessionId = sessionId;
     this.stopPolling();
+    this.clearStreamingState();
     this.updateHeaderTitle();
     await this.loadMessages();
   }
@@ -1557,6 +1570,9 @@ export class SidebarView extends ItemView {
   }
 
   private renderChat(): void {
+    // Clear streaming DOM ref since chatEl.empty() will remove it
+    this._streamingEl = null;
+    this._streamingContentEl = null;
     this.chatEl.empty();
 
     if (this.messages.length === 0) {
@@ -1588,6 +1604,11 @@ export class SidebarView extends ItemView {
     // Render pending question card (from question.asked SSE event)
     if (this._pendingQuestion) {
       this.renderPendingQuestion();
+    }
+
+    // Re-attach streaming content if actively streaming
+    if (this._isStreaming && this._streamingText) {
+      this.renderStreamingContent();
     }
 
     this.scrollToBottom();
@@ -2328,6 +2349,46 @@ export class SidebarView extends ItemView {
     return `${Math.floor(diff / 86_400_000)}d ago`;
   }
 
+  /**
+   * Render or update the streaming content element in-place.
+   * Instead of re-rendering the entire chat, this appends/updates a single
+   * streaming bubble at the bottom. This is much faster and avoids flicker.
+   */
+  private renderStreamingContent(): void {
+    if (!this._streamingEl) {
+      // Create the streaming bubble container
+      this._streamingEl = this.chatEl.createDiv({ cls: "och-turn" });
+      const assistantEl = this._streamingEl.createDiv({ cls: "och-assistant-msg" });
+      this._streamingContentEl = assistantEl.createDiv({ cls: "och-assistant-content" });
+    }
+
+    // Update text content using MarkdownRenderer for proper formatting
+    if (this._streamingContentEl && this._streamingText) {
+      this._streamingContentEl.empty();
+      MarkdownRenderer.render(
+        this.app,
+        this._streamingText,
+        this._streamingContentEl,
+        "",
+        this.plugin,
+      );
+    }
+
+    this.scrollToBottom();
+  }
+
+  /** Clear all streaming state — called when streaming completes */
+  private clearStreamingState(): void {
+    this._streamingText = "";
+    this._streamingReasoning = "";
+    this._isStreaming = false;
+    if (this._streamingEl) {
+      this._streamingEl.remove();
+      this._streamingEl = null;
+      this._streamingContentEl = null;
+    }
+  }
+
   private scrollToBottom(): void {
     requestAnimationFrame(() => {
       this.chatEl.scrollTop = this.chatEl.scrollHeight;
@@ -3052,6 +3113,7 @@ export class SidebarView extends ItemView {
     }
 
     this.clearEditor();
+    this.clearStreamingState();
     this.setWaiting(true);
 
     // Optimistic user message
@@ -3480,7 +3542,8 @@ export class SidebarView extends ItemView {
         this._sessionStatus = statusType;
 
         if (statusType === "idle") {
-          // Final poll to get complete data, then stop
+          // Clear streaming state and do final poll to sync complete data
+          this.clearStreamingState();
           this.poll();
         } else if (statusType === "busy") {
           this.setWaiting(true);
@@ -3510,15 +3573,32 @@ export class SidebarView extends ItemView {
         break;
       }
 
-      case "message.part.delta":
-        // Content is streaming — throttle polls for near-real-time updates
-        this.throttledPoll(200);
+      case "message.part.delta": {
+        // Accumulate streaming content directly from SSE delta events
+        const deltaSessionID = e.properties?.sessionID as string | undefined;
+        if (deltaSessionID && deltaSessionID !== this.plugin.currentSessionId) break;
+        const field = e.properties?.field as string | undefined;
+        const delta = e.properties?.delta as string | undefined;
+        if (delta) {
+          if (field === "reasoning") {
+            this._streamingReasoning += delta;
+          } else {
+            // Default to text
+            this._streamingText += delta;
+          }
+          if (!this._isStreaming) {
+            this._isStreaming = true;
+            this.setWaiting(true);
+          }
+          this.renderStreamingContent();
+        }
         break;
+      }
 
       case "message.part.updated":
       case "message.updated":
       case "message.created":
-        // Structure changed (tool result, new message, etc.) — poll quickly
+        // Structure changed (tool result, new message, etc.) — poll to sync state
         this.throttledPoll(50);
         break;
 
