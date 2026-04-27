@@ -60,7 +60,7 @@ export class OpenCodeHubSettingTab extends PluginSettingTab {
       height: 8px;
       border-radius: 50%;
       margin-right: 8px;
-      background: ${this.plugin.isConnected ? "#22c55e" : "#ef4444"};
+      background: ${this.plugin.isConnected ? "var(--text-success, #22c55e)" : "var(--text-error, #ef4444)"};
     `;
     statusEl.createSpan({
       text: this.plugin.isConnected ? "Connected" : "Disconnected",

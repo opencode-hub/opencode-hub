@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, MarkdownRenderer, setIcon } from "obsidian";
+import { ItemView, WorkspaceLeaf, MarkdownRenderer, setIcon, Menu, TFile, Notice } from "obsidian";
 import type OpenCodeHubPlugin from "./main";
 import type { Session, MessageResponse, MessagePartResponse } from "@opencode-hub/client";
 import fuzzysort from "fuzzysort";
@@ -57,6 +57,37 @@ interface PopoverItem {
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// File mention constants
+// ---------------------------------------------------------------------------
+
+const MAX_FILE_CHARS = 50_000;
+
+const BINARY_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico",
+  "pdf", "zip", "tar", "gz", "7z", "rar",
+  "mp3", "mp4", "wav", "avi", "mov", "mkv",
+  "exe", "dll", "so", "dylib", "wasm",
+  "sqlite", "db",
+]);
+
+function truncateContent(content: string, max: number): {
+  text: string;
+  wasTruncated: boolean;
+} {
+  if (content.length <= max) return { text: content, wasTruncated: false };
+  return {
+    text: content.slice(0, max) +
+      "\n\n[... truncated \u2014 file exceeds " + max.toLocaleString() + " characters ...]",
+    wasTruncated: true,
+  };
+}
+
+function escapeXmlAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ---------------------------------------------------------------------------
 // CSS — injected once into document.head for persistence across re-opens
 // ---------------------------------------------------------------------------
 
@@ -87,6 +118,10 @@ const STYLES = /* css */ `
   font-size: 13px;
   color: var(--text-normal);
   overflow: hidden;
+  /* Derived theme colors — centralised for custom theme compatibility */
+  --och-error-bg: color-mix(in srgb, var(--text-error, #ef4444) 8%, transparent);
+  --och-error-border: color-mix(in srgb, var(--text-error, #ef4444) 25%, transparent);
+  --och-warning-bg: color-mix(in srgb, var(--text-warning, #e6a700) 10%, transparent);
 }
 
 /* Reset Obsidian's global button styles inside our sidebar.
@@ -142,6 +177,17 @@ const STYLES = /* css */ `
   gap: 4px;
   flex-shrink: 0;
 }
+.och-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.och-status-dot--connected { background: var(--text-success, #22c55e); }
+.och-status-dot--disconnected { background: var(--text-error, #ef4444); }
+
 .och-icon-btn {
   display: flex;
   align-items: center;
@@ -257,6 +303,44 @@ const STYLES = /* css */ `
   background: var(--background-modifier-hover);
 }
 
+/* Session delete inline confirmation */
+.och-confirm-overlay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0 8px;
+  animation: och-confirm-fadein 0.1s ease-out;
+}
+@keyframes och-confirm-fadein {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.och-confirm-text {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-normal);
+}
+.och-confirm-yes {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-error, #ef4444);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.och-confirm-yes:hover {
+  background: var(--background-modifier-hover);
+}
+.och-confirm-no {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.och-confirm-no:hover {
+  background: var(--background-modifier-hover);
+}
+
 /* ── Chat area ───────────────────────────────────────────── */
 .och-chat-wrap {
   position: relative;
@@ -298,6 +382,27 @@ const STYLES = /* css */ `
 .och-empty-hint {
   font-size: 11px;
   color: var(--text-faint);
+}
+.och-empty-action-btn {
+  margin-top: 8px;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--interactive-accent) !important;
+  color: var(--text-on-accent) !important;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.och-empty-action-btn:hover { opacity: 0.85; }
+.och-empty-action-btn--secondary {
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+}
+.och-empty-action-btn--secondary:hover {
+  background: var(--background-modifier-hover) !important;
+  color: var(--text-normal) !important;
 }
 
 /* ── Messages — left/right chat bubbles ──────────────────── */
@@ -372,6 +477,46 @@ const STYLES = /* css */ `
 }
 .och-assistant-content p:first-child { margin-top: 0; }
 .och-assistant-content p:last-child { margin-bottom: 0; }
+
+/* ── Code block copy button ──────────────────────────────── */
+.och-assistant-content pre,
+.och-reasoning-content pre {
+  position: relative;
+}
+.och-code-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  z-index: 1;
+}
+.och-code-copy-btn svg {
+  width: 14px;
+  height: 14px;
+}
+pre:hover .och-code-copy-btn {
+  opacity: 1;
+}
+.och-code-copy-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.och-code-copy-btn--copied {
+  opacity: 1;
+  color: var(--text-success, var(--interactive-accent));
+  border-color: var(--text-success, var(--interactive-accent)) !important;
+}
 
 /* Message metadata line — transparent by default, visible on hover */
 .och-msg-meta {
@@ -552,8 +697,8 @@ const STYLES = /* css */ `
   border-radius: 3px;
   background: var(--background-modifier-hover);
 }
-.och-tool-entry-status--success { color: #22c55e; }
-.och-tool-entry-status--error { color: #ef4444; }
+.och-tool-entry-status--success { color: var(--text-success, #22c55e); }
+.och-tool-entry-status--error { color: var(--text-error, #ef4444); }
 .och-tool-detail-pane {
   display: none;
   padding: 4px 0 4px 22px;
@@ -773,8 +918,8 @@ const STYLES = /* css */ `
   margin-bottom: 14px;
   padding: 8px 12px;
   border-radius: 8px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: var(--och-error-bg);
+  border: 1px solid var(--och-error-border);
   color: var(--text-error, #ef4444);
   font-size: 12px;
 }
@@ -960,7 +1105,7 @@ const STYLES = /* css */ `
 }
 .och-pill--agent {
   color: var(--text-warning, #e6a700);
-  background: rgba(230, 167, 0, 0.1);
+  background: var(--och-warning-bg);
 }
 
 /* Submit button — dark circle, white arrow, inverted from background */
@@ -981,7 +1126,7 @@ const STYLES = /* css */ `
   padding: 0 !important;
 }
 .opencode-hub-sidebar .och-submit-btn:hover { opacity: 0.85; }
-.opencode-hub-sidebar .och-submit-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.opencode-hub-sidebar .och-submit-btn:disabled { opacity: 0.4; cursor: wait; }
 .opencode-hub-sidebar .och-submit-btn svg {
   width: 16px;
   height: 16px;
@@ -1230,6 +1375,7 @@ export class SidebarView extends ItemView {
   private messages: ParsedMessage[] = [];
   private sessions: Session[] = [];
   private waiting = false;
+  private aborting = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   /** SSE-driven session status: "idle" | "busy" | "retry" | undefined (no SSE data yet) */
   private _sessionStatus: string | undefined;
@@ -1249,6 +1395,10 @@ export class SidebarView extends ItemView {
   private _streamingEl: HTMLElement | null = null;
   /** DOM element for the streaming content text inside _streamingEl */
   private _streamingContentEl: HTMLElement | null = null;
+  /** Debounce timer for streaming renders */
+  private _streamingRenderTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether streaming content has changed since last render */
+  private _streamingDirty = false;
   /** Pending question from question.asked SSE event */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _pendingQuestion: {
@@ -1271,7 +1421,11 @@ export class SidebarView extends ItemView {
   // Dropdown state (agent, model, variant)
   private activeDropdown: "session" | "agent" | "model" | "variant" | null = null;
 
+  // Connection listener
+  private _unsubConnection: (() => void) | null = null;
+
   // DOM refs
+  private statusDotEl!: HTMLElement;
   private headerTitleEl!: HTMLElement;
   private sessionDropdownEl!: HTMLElement;
   private chatWrapEl!: HTMLElement; // relative wrapper for chat + FAB
@@ -1330,12 +1484,19 @@ export class SidebarView extends ItemView {
       }
     });
 
+    // Register connection listener for live status updates
+    this._unsubConnection = this.plugin.onConnectionChange((connected) => {
+      this.onConnectionChanged(connected);
+    });
+
     await this.refreshSessions();
     await this.loadMessages();
     this.refreshContextStrip();
   }
 
   async onClose(): Promise<void> {
+    this._unsubConnection?.();
+    this._unsubConnection = null;
     this.stopPolling();
   }
 
@@ -1345,6 +1506,25 @@ export class SidebarView extends ItemView {
 
   private buildHeader(root: HTMLElement): void {
     const header = root.createDiv({ cls: "och-header" });
+
+    // Connection status dot
+    this.statusDotEl = header.createDiv({ cls: "och-status-dot" });
+    this.updateStatusDot();
+    this.statusDotEl.addEventListener("click", (event) => {
+      if (this.plugin.isConnected) {
+        const menu = new Menu();
+        menu.addItem((item) => item.setTitle("Disconnect").setIcon("unplug")
+          .onClick(() => { this.plugin.disconnect(); }));
+        const ws = this.plugin.getAvailableWorkspaces();
+        if (ws.length > 0) {
+          menu.addItem((item) => item.setTitle("Switch workspace\u2026").setIcon("arrow-left-right")
+            .onClick(() => this.plugin.showWorkspacePicker()));
+        }
+        menu.showAtMouseEvent(event as MouseEvent);
+      } else {
+        this.plugin.connect().catch(() => {});
+      }
+    });
 
     this.headerTitleEl = header.createDiv({ cls: "och-header-title" });
     this.updateHeaderTitle();
@@ -1382,6 +1562,15 @@ export class SidebarView extends ItemView {
     const title = active.title || "";
     const isDefault = /^(New session|Child session) - \d{4}-/.test(title);
     this.headerTitleEl.textContent = isDefault ? "New Session" : (title || "New Session");
+  }
+
+  private updateStatusDot(): void {
+    const connected = this.plugin.isConnected;
+    this.statusDotEl.className = connected
+      ? "och-status-dot och-status-dot--connected"
+      : "och-status-dot och-status-dot--disconnected";
+    this.statusDotEl.setAttribute("aria-label",
+      connected ? "Connected" : "Disconnected \u2014 click to connect");
   }
 
   // ── Session dropdown ────────────────────────────────────────
@@ -1460,7 +1649,46 @@ export class SidebarView extends ItemView {
         });
         delBtn.addEventListener("click", (e) => {
           e.stopPropagation();
-          this.deleteSession(session.id);
+
+          // Prevent double-click creating multiple overlays
+          if (item.querySelector(".och-confirm-overlay")) return;
+
+          // Hide existing children (don't destroy them — preserves event listeners)
+          const children = Array.from(item.children) as HTMLElement[];
+          children.forEach((c) => (c.style.display = "none"));
+
+          // Build inline confirmation overlay
+          const overlay = item.createDiv({ cls: "och-confirm-overlay" });
+          overlay.addEventListener("click", (ev) => ev.stopPropagation());
+          overlay.createSpan({ cls: "och-confirm-text", text: "Delete?" });
+
+          const confirmBtn = overlay.createEl("button", {
+            cls: "och-confirm-yes",
+            text: "Delete",
+          });
+          const cancelBtn = overlay.createEl("button", {
+            cls: "och-confirm-no",
+            text: "Cancel",
+          });
+
+          const revert = () => {
+            overlay.remove();
+            children.forEach((c) => (c.style.display = ""));
+          };
+
+          const timer = setTimeout(revert, 3000);
+
+          confirmBtn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            clearTimeout(timer);
+            this.deleteSession(session.id);
+          });
+
+          cancelBtn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            clearTimeout(timer);
+            revert();
+          });
         });
       }
     };
@@ -1821,8 +2049,32 @@ export class SidebarView extends ItemView {
 
   private renderEmptyState(): void {
     const empty = this.chatEl.createDiv({ cls: "och-empty-state" });
-    empty.createDiv({ cls: "och-empty-title", text: "Start a conversation" });
-    empty.createDiv({ cls: "och-empty-hint", text: "Ask about your notes, or paste an image" });
+
+    if (!this.plugin.isConnected) {
+      empty.createDiv({ cls: "och-empty-title", text: "Not connected" });
+      empty.createDiv({ cls: "och-empty-hint", text: "Connect to an OpenCode server to start chatting" });
+
+      const connectBtn = empty.createEl("button", {
+        cls: "och-empty-action-btn",
+        text: "Connect",
+      });
+      connectBtn.addEventListener("click", async () => {
+        try { await this.plugin.connect(); }
+        catch { /* connect() shows its own Notice */ }
+      });
+
+      const workspaces = this.plugin.getAvailableWorkspaces();
+      if (workspaces.length > 0) {
+        const wsBtn = empty.createEl("button", {
+          cls: "och-empty-action-btn och-empty-action-btn--secondary",
+          text: "Switch workspace\u2026",
+        });
+        wsBtn.addEventListener("click", () => this.plugin.showWorkspacePicker());
+      }
+    } else {
+      empty.createDiv({ cls: "och-empty-title", text: "Start a conversation" });
+      empty.createDiv({ cls: "och-empty-hint", text: "Ask about your notes, or paste an image" });
+    }
   }
 
   private renderUserMessage(parent: HTMLElement, msg: ParsedMessage): void {
@@ -1849,6 +2101,13 @@ export class SidebarView extends ItemView {
       setIcon(copyBtn, "check");
       setTimeout(() => { copyBtn.empty(); setIcon(copyBtn, "copy"); }, 1500);
     });
+    // Edit & resend button
+    const editBtn = actions.createEl("button", {
+      cls: "och-msg-action-btn",
+      attr: { "aria-label": "Edit & resend" },
+    });
+    setIcon(editBtn, "pencil");
+    editBtn.addEventListener("click", () => this.handleEditMessage(msg));
   }
 
   /** Render user text, highlighting @file and @agent references as inline pills */
@@ -1899,6 +2158,7 @@ export class SidebarView extends ItemView {
     } else if (msg.content) {
       const contentEl = el.createDiv({ cls: "och-assistant-content" });
       MarkdownRenderer.render(this.app, msg.content, contentEl, "", this.plugin);
+      this.addCodeCopyButtons(contentEl);
     }
 
     // Metadata + actions
@@ -1959,6 +2219,14 @@ export class SidebarView extends ItemView {
         setIcon(copyBtn, "check");
         setTimeout(() => { copyBtn.empty(); setIcon(copyBtn, "copy"); }, 1500);
       });
+      // Regenerate button
+      const regenBtn = actions.createEl("button", {
+        cls: "och-msg-action-btn",
+        attr: { "aria-label": "Regenerate" },
+      });
+      setIcon(regenBtn, "refresh-cw");
+      if (isLast && this.waiting) regenBtn.disabled = true;
+      regenBtn.addEventListener("click", () => this.handleRegenerate(msg));
     }
   }
 
@@ -1982,6 +2250,7 @@ export class SidebarView extends ItemView {
 
     // Render markdown content
     MarkdownRenderer.render(this.app, reasoning, details, "", this.plugin);
+    this.addCodeCopyButtons(details);
 
     let expanded = false;
     header.addEventListener("click", () => {
@@ -2349,6 +2618,34 @@ export class SidebarView extends ItemView {
     return `${Math.floor(diff / 86_400_000)}d ago`;
   }
 
+  /** Add a copy button to each code block inside a rendered container. */
+  private addCodeCopyButtons(container: HTMLElement): void {
+    container.querySelectorAll("pre > code").forEach((codeEl) => {
+      const preEl = codeEl.parentElement as HTMLPreElement;
+      if (preEl.querySelector(".och-code-copy-btn")) return; // idempotent
+
+      const btn = preEl.createEl("button", {
+        cls: "och-code-copy-btn",
+        attr: { "aria-label": "Copy code" },
+      });
+      setIcon(btn, "copy");
+
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        navigator.clipboard.writeText(codeEl.textContent || "");
+        btn.empty();
+        setIcon(btn, "check");
+        btn.addClass("och-code-copy-btn--copied");
+        setTimeout(() => {
+          btn.empty();
+          setIcon(btn, "copy");
+          btn.removeClass("och-code-copy-btn--copied");
+        }, 1500);
+      });
+    });
+  }
+
   /**
    * Render or update the streaming content element in-place.
    * Instead of re-rendering the entire chat, this appends/updates a single
@@ -2377,8 +2674,26 @@ export class SidebarView extends ItemView {
     this.scrollToBottom();
   }
 
+  /** Schedule a debounced streaming render (at most once per 300ms) */
+  private scheduleStreamingRender(): void {
+    if (this._streamingRenderTimer) return; // already scheduled
+    this._streamingRenderTimer = setTimeout(() => {
+      this._streamingRenderTimer = null;
+      if (this._streamingDirty) {
+        this._streamingDirty = false;
+        this.renderStreamingContent();
+      }
+    }, 300);
+  }
+
   /** Clear all streaming state — called when streaming completes */
   private clearStreamingState(): void {
+    // Flush any pending render
+    if (this._streamingRenderTimer) {
+      clearTimeout(this._streamingRenderTimer);
+      this._streamingRenderTimer = null;
+    }
+    this._streamingDirty = false;
     this._streamingText = "";
     this._streamingReasoning = "";
     this._isStreaming = false;
@@ -2511,8 +2826,13 @@ export class SidebarView extends ItemView {
       return;
     }
 
-    // Escape — close popover or blur
+    // Escape — abort if waiting, else close popover or blur
     if (e.key === "Escape") {
+      if (this.waiting && !this._pendingQuestion && !this.aborting) {
+        e.preventDefault();
+        this.handleAbort();
+        return;
+      }
       if (this.activePopover) {
         this.closePopover();
       }
@@ -2581,6 +2901,54 @@ export class SidebarView extends ItemView {
     return this.getEditorText().trim() === "";
   }
 
+  /** Extract file pill references from the editor DOM (must be called before clearEditor). */
+  private extractFilePills(): Array<{ ref: string }> {
+    const pills: Array<{ ref: string }> = [];
+    const seen = new Set<string>();
+    this.editorEl.querySelectorAll(".och-pill").forEach((el) => {
+      const htmlEl = el as HTMLElement;
+      if (htmlEl.dataset.type === "file" && htmlEl.dataset.ref) {
+        const ref = htmlEl.dataset.ref;
+        if (!seen.has(ref)) {
+          seen.add(ref);
+          pills.push({ ref });
+        }
+      }
+    });
+    return pills;
+  }
+
+  /** Resolve file content from vault (Obsidian) or workspace (OpenCode Server). */
+  private async resolveFileContent(ref: string): Promise<
+    | { content: string; source: "vault" | "workspace" }
+    | { binary: true }
+    | null
+  > {
+    // 1. Try vault first
+    const abstractFile = this.plugin.app.vault.getAbstractFileByPath(ref);
+    if (abstractFile instanceof TFile) {
+      if (BINARY_EXTENSIONS.has(abstractFile.extension.toLowerCase())) {
+        return { binary: true };
+      }
+      const content = await this.plugin.app.vault.read(abstractFile);
+      return { content, source: "vault" };
+    }
+
+    // 2. Try workspace (OpenCode Server API)
+    if (this.plugin.client) {
+      try {
+        const fileContent = await this.plugin.client.readFile(ref);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const text = (fileContent as any).content ?? (fileContent as any).text ?? "";
+        return { content: String(text), source: "workspace" };
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
   private clearEditor(): void {
     this.editorEl.innerHTML = "";
   }
@@ -2599,7 +2967,8 @@ export class SidebarView extends ItemView {
   }
 
   /** Insert an inline pill into the editor at current cursor position */
-  private insertPill(type: "file" | "agent", label: string): void {
+  /** Insert an inline pill. `refPath` stores the full path for file resolution. */
+  private insertPill(type: "file" | "agent", label: string, refPath?: string): void {
     // First, remove the @query text before cursor
     this.removeMentionQueryFromEditor();
 
@@ -2608,7 +2977,7 @@ export class SidebarView extends ItemView {
     pill.contentEditable = "false";
     pill.textContent = `@${label}`;
     pill.dataset.type = type;
-    pill.dataset.ref = label;
+    pill.dataset.ref = refPath ?? label;
 
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
@@ -2769,7 +3138,13 @@ export class SidebarView extends ItemView {
       attr: { "aria-label": "Send" },
     });
     setIcon(this.submitBtnEl, "arrow-up");
-    this.submitBtnEl.addEventListener("click", () => this.handleSend());
+    this.submitBtnEl.addEventListener("click", () => {
+      if (this.waiting && !this._pendingQuestion) {
+        this.handleAbort();
+      } else {
+        this.handleSend();
+      }
+    });
   }
 
   private updateModelLabel(): void {
@@ -2986,7 +3361,7 @@ export class SidebarView extends ItemView {
           description: tab.filePath,
           icon: "file-text",
           tag: tab.isActive ? "Active" : "Open",
-          action: () => this.insertPill("file", tab.fileName!),
+          action: () => this.insertPill("file", tab.fileName!, tab.filePath!),
         });
       }
     }
@@ -3006,7 +3381,7 @@ export class SidebarView extends ItemView {
             label: `@${fileName}`,
             description: filePath,
             icon: "file",
-            action: () => this.insertPill("file", filePath),
+            action: () => this.insertPill("file", fileName, filePath),
           });
         }
       } catch { /* ignore */ }
@@ -3101,10 +3476,76 @@ export class SidebarView extends ItemView {
   // MESSAGE FLOW
   // =========================================================================
 
+  /** Regenerate: fork the session at the preceding user message and resend. */
+  private async handleRegenerate(assistantMsg: ParsedMessage): Promise<void> {
+    if (this.waiting) return;
+    if (!this.plugin.client || !this.plugin.currentSessionId) return;
+
+    // Find the preceding user message
+    const assistantIdx = this.messages.findIndex((m) => m.id === assistantMsg.id);
+    if (assistantIdx < 0) return;
+
+    let userMsg: ParsedMessage | undefined;
+    for (let i = assistantIdx - 1; i >= 0; i--) {
+      if (this.messages[i].role === "user") {
+        userMsg = this.messages[i];
+        break;
+      }
+    }
+    if (!userMsg) return;
+
+    this.clearStreamingState();
+    this.setWaiting(true);
+
+    try {
+      // Fork session at the user message to create a clean branch
+      const forked = await this.plugin.client.forkSession(
+        this.plugin.currentSessionId, userMsg.id,
+      );
+      // Switch to the forked session
+      this.plugin.currentSessionId = forked.id;
+      await this.refreshSessions();
+      this.updateHeaderTitle();
+
+      // Resend the same user content in the forked session
+      const parts = [{ type: "text" as const, text: userMsg.content }];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body: any = { parts };
+      if (this.plugin.currentAgent) body.agent = this.plugin.currentAgent;
+      await this.plugin.client.sendMessageAsync(forked.id, body);
+
+      this.startPolling();
+    } catch (err) {
+      this.setWaiting(false);
+      this.showError(err instanceof Error ? err.message : "Failed to regenerate.");
+    }
+  }
+
+  /** Edit & resend: populate the composer with the message text for re-editing. */
+  private handleEditMessage(msg: ParsedMessage): void {
+    if (this.waiting) return;
+
+    // Populate the composer with the message content
+    this.editorEl.textContent = msg.content;
+
+    // Move cursor to end
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.selectNodeContents(this.editorEl);
+    range.collapse(false);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+
+    this.editorEl.focus();
+  }
+
   private async handleSend(): Promise<void> {
     if (this.waiting) return;
     const text = this.getEditorText().trim();
     if (!text && this.pendingAttachments.length === 0) return;
+
+    // Extract file pills BEFORE clearing editor (DOM is destroyed on clear)
+    const filePills = this.extractFilePills();
 
     // Save to history
     if (text) {
@@ -3128,8 +3569,45 @@ export class SidebarView extends ItemView {
     this.renderChat();
 
     try {
-      // Build parts
+      // Resolve @file pill contents in parallel
+      const fileParts: Array<Record<string, unknown>> = [];
+      if (filePills.length > 0) {
+        const results = await Promise.allSettled(
+          filePills.map(async (pill) => {
+            const resolved = await this.resolveFileContent(pill.ref);
+            if (!resolved) {
+              return {
+                type: "text" as const,
+                text: `<file path="${escapeXmlAttr(pill.ref)}" error="not_found">File not found in vault or workspace</file>`,
+                synthetic: true,
+              };
+            }
+            if ("binary" in resolved) {
+              return {
+                type: "text" as const,
+                text: `<file path="${escapeXmlAttr(pill.ref)}" binary="true">Binary file \u2014 content not included</file>`,
+                synthetic: true,
+              };
+            }
+            const truncated = truncateContent(resolved.content, MAX_FILE_CHARS);
+            if (truncated.wasTruncated) {
+              new Notice(`${pill.ref}: truncated to ${MAX_FILE_CHARS.toLocaleString()} chars`);
+            }
+            return {
+              type: "text" as const,
+              text: `<file path="${escapeXmlAttr(pill.ref)}" source="${resolved.source}"${truncated.wasTruncated ? ' truncated="true"' : ''}>\n${truncated.text}\n</file>`,
+              synthetic: true,
+            };
+          }),
+        );
+        for (const r of results) {
+          if (r.status === "fulfilled" && r.value) fileParts.push(r.value);
+        }
+      }
+
+      // Build parts: file context first, then user text, then images
       const parts: Array<Record<string, unknown>> = [];
+      parts.push(...fileParts);
       if (text) parts.push({ type: "text", text });
       for (const att of this.pendingAttachments) {
         parts.push({ type: "image", image: att.data, mimeType: att.mimeType });
@@ -3158,6 +3636,39 @@ export class SidebarView extends ItemView {
     }
   }
 
+  private async handleAbort(): Promise<void> {
+    if (this.aborting) return;
+    if (!this.plugin.client || !this.plugin.currentSessionId) return;
+
+    this.aborting = true;
+
+    // Visual feedback: show spinner while abort request is in flight
+    this.submitBtnEl.disabled = true;
+    this.submitBtnEl.empty();
+    this.submitBtnEl.createSpan({ cls: "och-spinner" });
+
+    try {
+      await this.plugin.client.abortSession(this.plugin.currentSessionId);
+      // Server emits session.status → idle via SSE, handled by handleSSEEvent().
+      // Safety net: force-reset if SSE never fires within 3s.
+      setTimeout(() => {
+        if (this.aborting) {
+          this.clearStreamingState();
+          this.stopPolling();
+          this.setWaiting(false);
+          this.poll();
+        }
+      }, 3000);
+    } catch (err) {
+      // Abort failed — restore stop button so user can retry
+      this.aborting = false;
+      this.submitBtnEl.disabled = false;
+      this.submitBtnEl.empty();
+      setIcon(this.submitBtnEl, "square");
+      console.error("[OpenCode Hub] Failed to abort session:", err);
+    }
+  }
+
   private setWaiting(waiting: boolean): void {
     this.waiting = waiting;
     this.editorEl.dataset.disabled = waiting ? "true" : "false";
@@ -3165,15 +3676,27 @@ export class SidebarView extends ItemView {
       this.editorEl.setAttribute("contenteditable", "false");
       this.editorEl.dataset.placeholder = "Thinking\u2026";
     } else {
+      this.aborting = false;
       this.editorEl.setAttribute("contenteditable", "true");
       this.editorEl.dataset.placeholder = "Ask about your notes\u2026";
     }
-    this.submitBtnEl.disabled = waiting;
+
     this.submitBtnEl.empty();
-    if (waiting) {
+    if (waiting && !this._pendingQuestion) {
+      // Stop button — enabled, square icon
+      this.submitBtnEl.disabled = false;
+      setIcon(this.submitBtnEl, "square");
+      this.submitBtnEl.setAttribute("aria-label", "Stop");
+    } else if (waiting && this._pendingQuestion) {
+      // Question pending — disabled spinner
+      this.submitBtnEl.disabled = true;
       this.submitBtnEl.createSpan({ cls: "och-spinner" });
+      this.submitBtnEl.setAttribute("aria-label", "Waiting");
     } else {
+      // Ready — send button
+      this.submitBtnEl.disabled = false;
       setIcon(this.submitBtnEl, "arrow-up");
+      this.submitBtnEl.setAttribute("aria-label", "Send");
     }
   }
 
@@ -3349,13 +3872,6 @@ export class SidebarView extends ItemView {
         // Hide: todowrite (internal), question (rendered via SSE as card)
         // Also log any tools that slip through for debugging
         const HIDDEN_TOOLS = new Set(["todowrite", "question"]);
-        // Temporarily log tool names to debug "invalid" display
-        const allToolNames = parts.filter((p) => p.type === "tool").map((p) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const r = p as any;
-          return r.tool || "unknown";
-        });
-        if (allToolNames.length > 0) console.log("[OCH-TOOL-NAMES]", allToolNames);
 
         const toolParts: ToolPart[] = parts
           .filter((p) => p.type === "tool")
@@ -3590,7 +4106,8 @@ export class SidebarView extends ItemView {
             this._isStreaming = true;
             this.setWaiting(true);
           }
-          this.renderStreamingContent();
+          this._streamingDirty = true;
+          this.scheduleStreamingRender();
         }
         break;
       }
@@ -3642,8 +4159,10 @@ export class SidebarView extends ItemView {
   onActiveFileChanged(): void { this.refreshContextStrip(); }
 
   onConnectionChanged(_connected: boolean): void {
+    this.updateStatusDot();
     this.updateModelLabel();
     this.updateAgentSelect();
+    this.renderChat();
   }
 
   async onSessionChanged(): Promise<void> {
